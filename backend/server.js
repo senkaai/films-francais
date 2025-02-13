@@ -1,0 +1,91 @@
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
+const bodyParser = require('body-parser');
+
+const app = express();
+const port = 3000;
+
+const db = new sqlite3.Database('./movies.db');
+
+app.use(cors());
+app.use(bodyParser.json());
+
+// Servir les fichiers statiques du front-end
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+app.get('/movies', (req, res) => {
+    const { origine, niveau, minNote, maxNote } = req.query;
+    let query = "SELECT * FROM movies WHERE 1=1";
+    let params = [];
+
+    if (origine) {
+        query += " AND origine = ?";
+        params.push(origine);
+    }
+
+    if (niveau) {
+        if (niveau === 'Classic') {
+            query += " AND note >= 4";
+        } else if (niveau === 'Navet') {
+            query += " AND note <= 2";
+        } else if (niveau === 'Standard') {
+            query += " AND note > 2 AND note < 4";
+        }
+    }
+
+    if (minNote) {
+        query += " AND note >= ?";
+        params.push(minNote);
+    }
+
+    if (maxNote) {
+        query += " AND note <= ?";
+        params.push(maxNote);
+    }
+
+    db.all(query, params, (err, rows) => {
+        if (err) {
+            throw err;
+        }
+        res.json(rows);
+    });
+});
+
+app.post('/movies', (req, res) => {
+    const { nom, dateDeSortie, realisateur, notePublic, note, compagnie, description, origine, lienImage } = req.body;
+    db.run(`INSERT INTO movies (nom, dateDeSortie, realisateur, notePublic, note, compagnie, description, origine, lienImage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nom, dateDeSortie, realisateur, notePublic, note, compagnie, description, origine, lienImage], function (err) {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            res.json({ message: 'Film ajouté avec succès', id: this.lastID });
+        });
+});
+
+app.put('/movies/:id', (req, res) => {
+    const { id } = req.params;
+    const { nom, dateDeSortie, realisateur, notePublic, note, compagnie, description, origine, lienImage } = req.body;
+    db.run(`UPDATE movies SET nom = ?, dateDeSortie = ?, realisateur = ?, notePublic = ?, note = ?, compagnie = ?, description = ?, origine = ?, lienImage = ? WHERE id = ?`,
+        [nom, dateDeSortie, realisateur, notePublic, note, compagnie, description, origine, lienImage, id], function (err) {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            res.json({ message: 'Film modifié avec succès', changes: this.changes });
+        });
+});
+
+app.delete('/movies/:id', (req, res) => {
+    const id = req.params.id;
+    db.run(`DELETE FROM movies WHERE id = ?`, id, function (err) {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        res.json({ message: 'Film supprimé avec succès', changes: this.changes });
+    });
+});
+
+app.listen(port, () => {
+    console.log(`Serveur en cours d'exécution sur http://localhost:${port}`);
+});
